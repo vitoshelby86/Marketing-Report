@@ -4,6 +4,7 @@ export const int = (v: number) => (v == null || isNaN(v) ? '–' : nf.format(Mat
 export const dec = (v: number, d = 2) => (v == null || isNaN(v) ? '–' : v.toLocaleString('vi-VN', { maximumFractionDigits: d, minimumFractionDigits: d }));
 export const pct = (v: number, d = 1) => (v == null || isNaN(v) ? '–' : `${dec(v, d)}%`);
 
+/** Tiền ghi đầy đủ, không viết tắt: 1.992.253.550 */
 export function money(v: number) {
   return int(v);
 }
@@ -25,4 +26,4 @@ export function addDays(iso: string, n: number) {
 export const dmy = (iso: string) => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '');
 export const dmyFull = (iso: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '');
 
-export const PALETTE = ['#1877F2', '#c8102e', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#64748b'];
+export const PALETTE = ['#c8102e', '#2563eb', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#64748b'];

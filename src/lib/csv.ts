@@ -1,5 +1,5 @@
 export function parseCsv(text: string): Record<string, string>[] {
-  const clean = text.replace(/^﻿/, '');
+  const clean = text.replace(/^\uFEFF/, '');
   const rows: string[][] = [];
   let row: string[] = [];
   let field = '';
@@ -66,11 +66,9 @@ export function toNum(v: any): number {
   if (!s || s === '#N/A' || s === '#VALUE!' || s === '#REF!' || s === '#DIV/0!' || s === '–' || s === '-') return 0;
   const cleaned = s.replace(/[₫đ%\s]/g, '');
   if (!cleaned) return 0;
-  // Standard comma thousands separator (e.g., 15,620 or 1,992,253,550)
   if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(cleaned)) {
     return Number(cleaned.replace(/,/g, '')) || 0;
   }
-  // Vietnamese dot thousands separator (e.g., 15.620)
   if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
     return Number(cleaned.replace(/\./g, '')) || 0;
   }

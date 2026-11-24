@@ -71,7 +71,6 @@ export interface SaleOrder {
   is_returned: boolean;
   is_cancelled: boolean;
   items: SaleOrderItem[];
-  // Matched attributes from BC_Chung
   matched_ads: boolean;
   account: string;
   format: string;
@@ -104,10 +103,9 @@ function inferRegion(province: string): string {
 
 function extractProductCodeFromText(text: string): string {
   const s = String(text || '');
-  // Match patterns like "- 5101 -" or "5101" or "SP01" or "65122"
   const m1 = s.match(/[-–]\s*([A-Z]{0,3}\d{3,6})\s*(?:[-–/]|$)/i);
   if (m1) return m1[1].toUpperCase();
-  const m2 = s.match(/(SP\d{2,4}|\d{4,6})/i);
+  const m2 = s.match(/\b(SP\d{2,4}|\d{4,6})\b/i);
   if (m2) return m2[1].toUpperCase();
   return 'Khác';
 }
@@ -127,7 +125,6 @@ function detectPlatformFromText(text: string): PlatformId {
 }
 
 function parseCampaignParts(camp: string) {
-  // Format: 22/04_Santony_Mess_5101_Video_Interest_V002
   const parts = String(camp || '').split('_').map((x) => x.trim()).filter(Boolean);
   let product = '';
   let media = '';
@@ -230,7 +227,6 @@ function parseBCChung(rows: Record<string, string>[]): AdsRow[] {
 }
 
 function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrder[] {
-  // Build lookup maps from BC_Chung by Ad ID and Campaign Name
   const byAdId = new Map<string, AdsRow>();
   const byCamp = new Map<string, AdsRow>();
   const defaultCompany = adsRows[0]?.company || 'Santony';
@@ -239,7 +235,6 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
     if (a.campaign && !byCamp.has(a.campaign.toLowerCase())) byCamp.set(a.campaign.toLowerCase(), a);
   }
 
-  // Group multi-line order rows (where Mã đơn hàng is blank on continuation product rows)
   const orders: SaleOrder[] = [];
   let current: SaleOrder | null = null;
 
@@ -253,7 +248,7 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
       const date = toIsoDate(dateRaw);
       if (!date) continue;
 
-      const hrMatch = dateRaw.match(/(\d{1,2}):\d{2}/);
+      const hrMatch = dateRaw.match(/\b(\d{1,2}):\d{2}/);
       const hour = hrMatch ? Number(hrMatch[1]) : (orders.length % 14) + 8;
 
       const creator = String(r['người tạo'] || r['creator'] || 'Hệ thống').trim();
@@ -272,7 +267,6 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
       const srcNameRaw = String(r['nguồn đơn hàng (tên)'] || srcRaw || 'Facebook').trim();
       const pageId = cleanAdId(r['page id']);
 
-      // Extract clean source (e.g. "Facebook / Santony" -> source="Facebook", page="Santony")
       let source = 'Facebook';
       let pageFromSrc = '';
       if (srcNameRaw.includes('/')) {
@@ -290,10 +284,7 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
 
       const matched = (adId && byAdId.get(adId)) || (utmId && byAdId.get(utmId)) || (campName && byCamp.get(campName.toLowerCase())) || null;
 
-      const platform = matched
-        ? matched.platform
-        : detectPlatformFromText(`${source} ${campName}`);
-
+      const platform = matched ? matched.platform : detectPlatformFromText(`${source} ${campName}`);
       const prodCode = matched?.product || extractProductCodeFromText(prodRaw);
       const company = matched?.company || pageFromSrc || defaultCompany;
       const page = matched?.page || pageFromSrc || adsRows[0]?.page || 'Santony';
@@ -340,7 +331,6 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
       };
       orders.push(current);
     } else if (current && prodRaw) {
-      // Continuation product line belonging to previous Mã đơn hàng
       current.items.push({
         name: cleanProductName(prodRaw),
         code: extractProductCodeFromText(prodRaw),
@@ -349,7 +339,6 @@ function parseBCSale(rows: Record<string, string>[], adsRows: AdsRow[]): SaleOrd
     }
   }
 
-  // Determine new vs returning customer chronologically by phone number
   const sortedAsc = [...orders].sort((a, b) => a.date.localeCompare(b.date));
   const seenPhones = new Set<string>();
   for (const o of sortedAsc) {
@@ -1025,7 +1014,6 @@ export async function buildBreakdownReport(q: QueryParams & { dim: string }) {
   const hasOrdersDim = adsDims.includes(q.dim) || ordersOnlyDims.includes(q.dim) || q.dim === 'category';
 
   if (!hasAdsDim && !hasOrdersDim) {
-    // Demographic/device breakdown not present in raw sheets -> return clean empty with notice
     return { rows: [], prevRange: null, hasSpend: false, hasOrders: false };
   }
 
@@ -1237,7 +1225,6 @@ export async function buildSalesReport(q: QueryParams & { view: string }) {
     };
   }
 
-  // Sales Overview
   const totals = summarizeOrders(curOrders);
   const prev = hasPrev ? summarizeOrders(prevOrders) : null;
   const valid = curOrders.filter((o) => !o.is_cancelled);
