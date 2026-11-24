@@ -204,16 +204,68 @@ export function useFetch<T = any>(url: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [wsQuery, setWsQuery] = useState('');
+
+  useEffect(() => {
+    const readWs = () => {
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const company = sp.get('company') || 'Santony';
+        const platform = sp.get('platform') || 'facebook';
+        const sheetId = localStorage.getItem('report_mkt_sheet_id');
+        const effectiveSheetId = sheetId === null ? '1LtTZD65CJfu_heFvZtVn7JtL7DRa1Vd6Giche0hhI3M' : sheetId;
+        const adsTab = localStorage.getItem('report_mkt_ads_tab') || 'BC_Chung';
+        const saleTab = localStorage.getItem('report_mkt_sale_tab') || 'BC_Sale';
+        const q = new URLSearchParams();
+        q.set('company', company);
+        q.set('platform', platform);
+        if (effectiveSheetId) q.set('sheetId', effectiveSheetId);
+        if (adsTab) q.set('adsTab', adsTab);
+        if (saleTab) q.set('saleTab', saleTab);
+        return q.toString();
+      } catch {
+        return 'company=Santony&platform=facebook&sheetId=1LtTZD65CJfu_heFvZtVn7JtL7DRa1Vd6Giche0hhI3M&adsTab=BC_Chung&saleTab=BC_Sale';
+      }
+    };
+    setWsQuery(readWs());
+    const onStorage = () => setWsQuery(readWs());
+    const onPop = () => setWsQuery(readWs());
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('popstate', onPop);
+    const timer = window.setInterval(() => {
+      const next = readWs();
+      setWsQuery((prev) => (prev === next ? prev : next));
+    }, 500);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('popstate', onPop);
+      window.clearInterval(timer);
+    };
+  }, []);
+
   useEffect(() => {
     if (!url) return;
     let alive = true;
     setLoading(true);
-    fetch(url).then((r) => r.json()).then((j) => {
-      if (!alive) return;
-      if (j.error) setError(j.error); else { setError(''); setData(j); }
-    }).catch((e) => alive && setError(String(e))).finally(() => alive && setLoading(false));
-    return () => { alive = false; };
-  }, [url]);
+    const sep = url.includes('?') ? '&' : '?';
+    const fullUrl = wsQuery ? `${url}${sep}${wsQuery}` : url;
+    fetch(fullUrl)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive) return;
+        if (j.error) setError(j.error);
+        else {
+          setError('');
+          setData(j);
+        }
+      })
+      .catch((e) => alive && setError(String(e)))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [url, wsQuery]);
+
   return { data, loading, error };
 }
 

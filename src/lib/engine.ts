@@ -527,9 +527,9 @@ function shiftYearIso(iso: string, years: number) {
 export function getPeriodBounds(allDates: string[], from: string, to: string, cmp: string) {
   const sorted = [...allDates].filter(Boolean).sort();
   const effFrom = from <= '2000-01-02' && sorted.length ? sorted[0] : from;
-  const effTo = sorted.length && to > sorted[sorted.length - 1] ? sorted[sorted.length - 1] : to;
-  const start = effFrom <= effTo ? effFrom : effTo;
-  const end = effTo;
+  const effTo = sorted.length && (!to || to > sorted[sorted.length - 1]) ? sorted[sorted.length - 1] : to;
+  const start = effFrom && effTo ? (effFrom <= effTo ? effFrom : effTo) : sorted[0] || from;
+  const end = effTo || sorted[sorted.length - 1] || to;
 
   const days = Math.max(1, Math.round((+new Date(end + 'T00:00:00Z') - +new Date(start + 'T00:00:00Z')) / 86400000) + 1);
   let prevRange: { from: string; to: string } | null = null;
@@ -743,18 +743,26 @@ export interface QueryParams {
 }
 
 function filterData(ds: DatasetBundle, company: string, platform: PlatformId, from: string, to: string) {
-  const compLow = company.toLowerCase();
-  const ads = ds.ads.filter((a) => a.company.toLowerCase() === compLow && a.platform === platform && a.date >= from && a.date <= to);
-  const orders = ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === platform && o.date >= from && o.date <= to);
+  const compLow = String(company || '').toLowerCase().trim();
+  const byCompAds = compLow ? ds.ads.filter((a) => a.company.toLowerCase() === compLow && a.platform === platform) : ds.ads.filter((a) => a.platform === platform);
+  const byCompOrders = compLow ? ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === platform) : ds.orders.filter((o) => o.platform === platform);
+  const baseAds = byCompAds.length ? byCompAds : ds.ads.filter((a) => a.platform === platform);
+  const baseOrders = byCompOrders.length ? byCompOrders : ds.orders.filter((o) => o.platform === platform);
+  const ads = baseAds.filter((a) => (!from || a.date >= from) && (!to || a.date <= to));
+  const orders = baseOrders.filter((o) => (!from || o.date >= from) && (!to || o.date <= to));
   return { ads, orders };
 }
 
 export async function buildOverview(q: QueryParams) {
   const ds = await loadDataset(q.sheetId, q.adsTab, q.saleTab, q.refresh);
   const compLow = q.company.toLowerCase();
+  const platAds = ds.ads.filter((a) => a.platform === q.platform);
+  const platOrders = ds.orders.filter((o) => o.platform === q.platform);
+  const cAds = compLow ? platAds.filter((a) => a.company.toLowerCase() === compLow) : platAds;
+  const cOrders = compLow ? platOrders.filter((o) => o.company.toLowerCase() === compLow) : platOrders;
   const allDates = [
-    ...ds.ads.filter((a) => a.company.toLowerCase() === compLow && a.platform === q.platform).map((a) => a.date),
-    ...ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform).map((o) => o.date),
+    ...(cAds.length ? cAds : platAds).map((a) => a.date),
+    ...(cOrders.length ? cOrders : platOrders).map((o) => o.date),
   ];
   const { range, prevRange } = getPeriodBounds(allDates, q.from, q.to, q.cmp || 'prev');
 
@@ -840,9 +848,13 @@ export async function buildOverview(q: QueryParams) {
 export async function buildAdsReport(q: QueryParams & { dim: string }) {
   const ds = await loadDataset(q.sheetId, q.adsTab, q.saleTab, q.refresh);
   const compLow = q.company.toLowerCase();
+  const platAds = ds.ads.filter((a) => a.platform === q.platform);
+  const platOrders = ds.orders.filter((o) => o.platform === q.platform);
+  const cAds = compLow ? platAds.filter((a) => a.company.toLowerCase() === compLow) : platAds;
+  const cOrders = compLow ? platOrders.filter((o) => o.company.toLowerCase() === compLow) : platOrders;
   const allDates = [
-    ...ds.ads.filter((a) => a.company.toLowerCase() === compLow && a.platform === q.platform).map((a) => a.date),
-    ...ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform).map((o) => o.date),
+    ...(cAds.length ? cAds : platAds).map((a) => a.date),
+    ...(cOrders.length ? cOrders : platOrders).map((o) => o.date),
   ];
   const { range, prevRange } = getPeriodBounds(allDates, q.from, q.to, q.cmp || '');
 
@@ -967,9 +979,13 @@ export async function buildGrowthReport(q: Omit<QueryParams, 'from' | 'to' | 'cm
 export async function buildBreakdownReport(q: QueryParams & { dim: string }) {
   const ds = await loadDataset(q.sheetId, q.adsTab, q.saleTab, q.refresh);
   const compLow = q.company.toLowerCase();
+  const platAds = ds.ads.filter((a) => a.platform === q.platform);
+  const platOrders = ds.orders.filter((o) => o.platform === q.platform);
+  const cAds = compLow ? platAds.filter((a) => a.company.toLowerCase() === compLow) : platAds;
+  const cOrders = compLow ? platOrders.filter((o) => o.company.toLowerCase() === compLow) : platOrders;
   const allDates = [
-    ...ds.ads.filter((a) => a.company.toLowerCase() === compLow && a.platform === q.platform).map((a) => a.date),
-    ...ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform).map((o) => o.date),
+    ...(cAds.length ? cAds : platAds).map((a) => a.date),
+    ...(cOrders.length ? cOrders : platOrders).map((o) => o.date),
   ];
   const { range, prevRange } = getPeriodBounds(allDates, q.from, q.to, q.cmp || '');
 
@@ -1057,12 +1073,15 @@ export async function buildBreakdownReport(q: QueryParams & { dim: string }) {
 export async function buildSalesReport(q: QueryParams & { view: string }) {
   const ds = await loadDataset(q.sheetId, q.adsTab, q.saleTab, q.refresh);
   const compLow = q.company.toLowerCase();
-  const allDates = ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform).map((o) => o.date);
+  const platOrdersAll = ds.orders.filter((o) => o.platform === q.platform);
+  const compOrdersAll = compLow ? platOrdersAll.filter((o) => o.company.toLowerCase() === compLow) : platOrdersAll;
+  const allDates = (compOrdersAll.length ? compOrdersAll : platOrdersAll).map((o) => o.date);
   const { range, prevRange } = getPeriodBounds(allDates, q.from, q.to, q.cmp || '');
 
-  const curOrders = ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform && o.date >= range.from && o.date <= range.to);
+  const baseSales = compOrdersAll.length ? compOrdersAll : platOrdersAll;
+  const curOrders = baseSales.filter((o) => (!range.from || o.date >= range.from) && (!range.to || o.date <= range.to));
   const prevOrders = prevRange
-    ? ds.orders.filter((o) => o.company.toLowerCase() === compLow && o.platform === q.platform && o.date >= prevRange.from && o.date <= prevRange.to)
+    ? baseSales.filter((o) => (!prevRange.from || o.date >= prevRange.from) && (!prevRange.to || o.date <= prevRange.to))
     : [];
   const hasPrev = prevOrders.length > 0;
 
